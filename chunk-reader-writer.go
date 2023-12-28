@@ -35,6 +35,8 @@ type chunkReaderWriter struct {
 
 	paused bool // to keep track if the file read/write was paused
 
+	reachedEOF bool // to keep track if reached the EOF
+
 	bufReader *bufio.Reader
 
 	bufWriter *bufio.Writer
@@ -82,10 +84,14 @@ func (rw *chunkReaderWriter) ReadAndWrite(
 	}
 
 	// close the destination file
+	// and flush any data in the writer
 	defer func() {
 		log.Printf("[DEBUG] closing the dest file")
-		// c.bufWriter.Flush()
-		err := rw.dest.Close()
+		err := rw.bufWriter.Flush()
+		if err != nil {
+			log.Printf("[WARN] in flushing the file: %v", err)
+		}
+		err = rw.dest.Close()
 		if err != nil {
 			log.Printf("[WARN] error in closing the file: %v", err)
 		}
@@ -114,31 +120,39 @@ loop:
 			break loop
 		// continue reading and writing
 		default:
-			if !rw.paused {
+			if !rw.paused && !rw.reachedEOF {
 				rw.read(closingSignal)
 				rw.write()
 				continue
-			}
-			log.Printf("[DEBUG] chunk read writer was stopped")
-			discardedByte, err := rw.bufReader.Discard(int(rw.bytesRead))
-			if err != nil {
-				log.Printf("[ERROR] discard error: %v", err)
-				break loop
-			}
-			if err = rw.bufWriter.Flush(); err != nil {
-				log.Printf("[WARN] error in flushing the writer: %v", err)
-			}
-			file, err := os.OpenFile(rw.destPath, os.O_APPEND|os.O_WRONLY, 0644)
-			if err != nil {
-				log.Printf("[ERROR] error in reopening the file with append permission: %v", err)
-				return
-			}
-			rw.bufWriter = bufio.NewWriter(file)
-			log.Printf("[DEBUG] [discard=%d] [read=%d]", discardedByte, rw.bytesRead)
-			rw.read(closingSignal)
-			rw.write()
-			rw.paused = false
+			} else if rw.paused {
+				log.Printf("[DEBUG] chunk read writer was stopped")
 
+				// discard the bytes that have already been read
+				discardedByte, err := rw.bufReader.Discard(int(rw.bytesRead))
+				if err != nil {
+					log.Printf("[ERROR] discard error: %v", err)
+					break loop
+				}
+
+				// flush the writer for any remaining data to the file
+				if err = rw.bufWriter.Flush(); err != nil {
+					log.Printf("[WARN] error in flushing the writer: %v", err)
+				}
+
+				// open the same file but in append mode so as to persist the
+				// data
+				file, err := os.OpenFile(rw.destPath, os.O_APPEND|os.O_WRONLY, 0644)
+				if err != nil {
+					log.Printf("[ERROR] error in reopening the file with append permission: %v", err)
+					return
+				}
+
+				rw.bufWriter = bufio.NewWriterSize(file, rw.capacity)
+				log.Printf("[DEBUG] [discard=%d] [read=%d]", discardedByte, rw.bytesRead)
+				rw.read(closingSignal)
+				rw.write()
+				rw.paused = false
+			}
 		}
 	}
 	log.Printf("[INFO] [read=%d kb] [wrote=%d kb]", rw.bytesRead, rw.bytesWrote)
@@ -155,10 +169,12 @@ func (rw *chunkReaderWriter) read(closeSignal chan<- struct{}) {
 		log.Printf("[ERROR] reading the file: %v", err)
 		return
 	}
+
 	// we have completed reading of file
 	// send the close signal and stop rw from further read
 	if errors.Is(err, io.EOF) {
 		log.Println("[INFO] Reached the End of the File")
+		rw.reachedEOF = true
 		go func() {
 			closeSignal <- struct{}{}
 		}()
@@ -169,6 +185,7 @@ func (rw *chunkReaderWriter) read(closeSignal chan<- struct{}) {
 		log.Printf("[WARN] read 0 byte, [read error=%v]", err)
 		return
 	}
+
 	rw.chunkRead++
 	rw.lastReadBytes = n
 	rw.bytesRead += int64(n)
@@ -177,15 +194,19 @@ func (rw *chunkReaderWriter) read(closeSignal chan<- struct{}) {
 func (rw *chunkReaderWriter) write() {
 	defer log.Printf("[DEBUG] in writer: %d", rw.bytesWrote)
 
-	n, err := rw.bufWriter.Write(rw.buffer[:rw.lastReadBytes])
+	// calculate the offset from which to start writing the buffer
+	offset := int(rw.bytesWrote) % rw.capacity
+	n, err := rw.bufWriter.Write(rw.buffer[offset:rw.lastReadBytes])
 	if err != nil {
 		log.Printf("[ERROR] writing the file: %v", err)
 		return
 	}
-	if n != rw.lastReadBytes {
-		log.Printf("[WARN] wrote %d bytes expected %d", n, rw.bytesRead)
+
+	if n != rw.lastReadBytes-offset {
+		log.Printf("[WARN] wrote %d bytes expected %d", n, len(rw.buffer))
 		return
 	}
+
 	rw.chunkWrote++
 	rw.bytesWrote += int64(n)
 }
