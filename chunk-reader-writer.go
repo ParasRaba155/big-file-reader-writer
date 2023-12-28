@@ -42,17 +42,19 @@ type chunkReaderWriter struct {
 	bufWriter *bufio.Writer
 }
 
-func NewChunkReaderWriter(cap int) *chunkReaderWriter {
+func NewChunkReaderWriter(capacity int) *chunkReaderWriter {
 	// the buffer will be initialized with 0 length initial given capacity
 	return &chunkReaderWriter{
-		buffer:   make([]byte, cap),
-		capacity: cap,
+		buffer:   make([]byte, capacity),
+		capacity: capacity,
 	}
 }
 
 // createTempFile creates a temporary file with the random file name
 // and same extension as the extension provided in the argument
 func createTempFile(ext string) *os.File {
+	//nolint:gosec,gomnd // we do not need secure random generator
+	// here and 101 is not configurable which is fine
 	dest := fmt.Sprintf("file-%03d%s", rand.Intn(101), ext)
 	file, err := os.Create(dest)
 	if err != nil {
@@ -106,8 +108,16 @@ loop:
 		// break the loop
 		case msg := <-sig:
 			log.Printf("[INFO] message received from the signal [msg=%s]", msg)
-			log.Printf("[INFO] read stats [chunk=%d] [bytes=%d]", rw.chunkRead, rw.bytesRead)
-			log.Printf("[INFO] write stats [chunk=%d] [bytes=%d]", rw.chunkWrote, rw.bytesWrote)
+			log.Printf(
+				"[INFO] read stats [chunk=%d] [bytes=%d]",
+				rw.chunkRead,
+				rw.bytesRead,
+			)
+			log.Printf(
+				"[INFO] write stats [chunk=%d] [bytes=%d]",
+				rw.chunkWrote,
+				rw.bytesWrote,
+			)
 			// mark the flag for pausing the reader writer
 			rw.paused = true
 			break loop
@@ -116,7 +126,10 @@ loop:
 		case <-closingSignal:
 			log.Printf("[DEBUG] close signal received")
 			log.Printf("[DEBUG] number of bytes in buffer: %d", rw.bufWriter.Buffered())
-			log.Printf("[DEBUG] number of bytes in available: %d", rw.bufWriter.Available())
+			log.Printf(
+				"[DEBUG] number of bytes in available: %d",
+				rw.bufWriter.Available(),
+			)
 			break loop
 		// continue reading and writing
 		default:
@@ -141,9 +154,13 @@ loop:
 
 				// open the same file but in append mode so as to persist the
 				// data
+				//nolint:gomnd
 				file, err := os.OpenFile(rw.destPath, os.O_APPEND|os.O_WRONLY, 0644)
 				if err != nil {
-					log.Printf("[ERROR] error in reopening the file with append permission: %v", err)
+					log.Printf(
+						"[ERROR] error in reopening the file with append permission: %v",
+						err,
+					)
 					return
 				}
 
