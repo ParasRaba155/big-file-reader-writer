@@ -79,9 +79,11 @@ func (rw *chunkReaderWriter) ReadAndWrite(
 	// the writer will not be created
 	if rw.bufWriter == nil {
 		log.Printf("[DEBUG] bufWriter is nil")
-		destFile := createTempFile(path.Ext(filename))
-		rw.dest = destFile
-		rw.destPath = destFile.Name()
+		if rw.dest == nil {
+			destFile := createTempFile(path.Ext(filename))
+			rw.dest = destFile
+			rw.destPath = destFile.Name()
+		}
 		rw.bufWriter = bufio.NewWriterSize(rw.dest, rw.capacity)
 	}
 
