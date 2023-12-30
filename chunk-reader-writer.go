@@ -13,25 +13,20 @@ import (
 )
 
 type chunkReaderWriter struct {
-	// destination writer to write to
-	dest     io.WriteCloser
+	dest     io.WriteCloser // destination writer to write to
 	destPath string
 
 	buffer   []byte
 	capacity int // capacity of the buffer
 
-	// number of chunks that have been read
-	chunkRead int64
-	// number of bytes that have been read so far
-	bytesRead int64
+	chunkRead int64 // number of chunks that have been read
 
-	// to keep track of the last read bytes
-	lastReadBytes int
+	bytesRead int64 // number of bytes that have been read so far
 
-	// number of chunks that have been written
-	chunkWrote int64
-	// number of bytes that have been written so far
-	bytesWrote int64
+	lastReadBytes int // to keep track of the last read bytes
+
+	chunkWrote int64 // number of chunks that have been written
+	bytesWrote int64 // number of bytes that have been written so far
 
 	paused bool // to keep track if the file read/write was paused
 
@@ -43,7 +38,6 @@ type chunkReaderWriter struct {
 }
 
 func NewChunkReaderWriter(capacity int) *chunkReaderWriter {
-	// the buffer will be initialized with 0 length initial given capacity
 	return &chunkReaderWriter{
 		buffer:   make([]byte, capacity),
 		capacity: capacity,
@@ -181,8 +175,7 @@ func (rw *chunkReaderWriter) read(closeSignal chan<- struct{}) {
 	defer log.Printf("[DEBUG] in reader: %d", rw.bytesRead)
 	// elongate the read time
 	time.Sleep(time.Second)
-	// we have initialized the buffer with 0 length and some capacity
-	// so fill the buffer accordingly
+
 	n, err := rw.bufReader.Read(rw.buffer)
 	if err != nil && !errors.Is(err, io.EOF) {
 		log.Printf("[ERROR] reading the file: %v", err)
