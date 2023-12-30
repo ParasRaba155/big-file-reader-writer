@@ -221,11 +221,6 @@ func (rw *chunkReaderWriter) write() {
 		return
 	}
 
-	if n != rw.lastReadBytes-offset {
-		log.Printf("[WARN] wrote %d bytes expected %d", n, len(rw.buffer))
-		return
-	}
-
 	rw.chunkWrote++
 	rw.bytesWrote += int64(n)
 }
