@@ -15,3 +15,4 @@ lint:
 
 format:
 	go fmt ./...
+	golines -m 80 -w .
