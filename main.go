@@ -8,13 +8,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const defaultCapacity = 1024
-
 func main() {
 	router := gin.Default()
 	gin.SetMode(gin.TestMode)
 	h := handler{
-		store: NewChunkReaderWriter(defaultCapacity),
+		//nolint:gomnd // for testing purposes only
+		store: NewChunkReaderWriter(1024),
 		sig:   make(chan string),
 	}
 	router.POST("/upload", h.uploadHandler)
